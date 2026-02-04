@@ -48,6 +48,7 @@
     <button id="runBtn">Run tests</button>
     <div class="results" id="results"></div>
 
+    <script src="wav.js"></script>
     <script>
       function approxEqual(a, b, epsilon = 1e-6) {
         return Math.abs(a - b) <= epsilon;
@@ -162,6 +163,29 @@
             approxEqual(env[2], 0.5) &&
             approxEqual(env[4], 0.5) &&
             approxEqual(env[5], 0.25)
+        });
+
+        const wav = buildWavData(new Float32Array([0, 1, -1]), 8000);
+        const header = new DataView(wav);
+        const text = (start, length) => {
+          let value = "";
+          for (let i = 0; i < length; i += 1) {
+            value += String.fromCharCode(header.getUint8(start + i));
+          }
+          return value;
+        };
+        results.push({
+          name: "WAV export header encodes sample rate",
+          pass: text(0, 4) === "RIFF" &&
+            text(8, 4) === "WAVE" &&
+            text(12, 4) === "fmt " &&
+            header.getUint32(16, true) === 16 &&
+            header.getUint16(20, true) === 1 &&
+            header.getUint16(22, true) === 1 &&
+            header.getUint32(24, true) === 8000 &&
+            header.getUint16(34, true) === 16 &&
+            text(36, 4) === "data" &&
+            header.getUint32(40, true) === 6
         });
 
         return results;
