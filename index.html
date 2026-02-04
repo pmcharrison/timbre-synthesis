@@ -46,16 +46,20 @@
         height: 100vh;
         overflow: hidden;
         display: flex;
-        align-items: center;
-        justify-content: center;
+        flex-direction: column;
+        align-items: stretch;
+        justify-content: flex-start;
         box-sizing: border-box;
         padding: env(safe-area-inset-top) env(safe-area-inset-right)
           env(safe-area-inset-bottom) env(safe-area-inset-left);
       }
 
       #fitContent {
-        transform: scale(var(--fit-scale, 1));
-        transform-origin: center center;
+        width: 100%;
+        height: 100%;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
       }
 
       header {
@@ -74,6 +78,10 @@
       }
 
       main {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow: auto;
+        overscroll-behavior: contain;
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 20px;
@@ -85,6 +93,7 @@
         border: 1px solid var(--border);
         border-radius: 12px;
         padding: 16px;
+        min-width: 0;
       }
 
       .note-box {
@@ -229,13 +238,24 @@
       }
 
       .plot-card {
-        height: 320px;
+        height: clamp(200px, 30vh, 320px);
+        width: 100%;
       }
 
       .footer {
         padding: 8px 24px 24px 24px;
         color: var(--muted);
         font-size: 12px;
+      }
+
+      @media (max-width: 960px) {
+        main {
+          grid-template-columns: 1fr;
+        }
+
+        .plot-row {
+          grid-template-columns: 1fr;
+        }
       }
     </style>
   </head>
@@ -542,13 +562,14 @@
         Plotly.react("waveformPlot", [
           { x: waveX, y: waveY, mode: "lines", line: { color: "#4f8cff" } }
         ], {
+          autosize: true,
           margin: { l: 40, r: 10, t: 30, b: 35 },
           title: "Waveform (zoomed)",
           xaxis: { title: "Time (s)" },
           yaxis: { title: "Amplitude", range: [-1.1, 1.1] },
           paper_bgcolor: "rgba(0,0,0,0)",
           plot_bgcolor: "rgba(0,0,0,0)"
-        }, { displayModeBar: false });
+        }, { displayModeBar: false, responsive: true });
 
         const fullWaveX = [];
         const fullWaveY = [];
@@ -563,13 +584,14 @@
         Plotly.react("waveformFullPlot", [
           { x: fullWaveX, y: fullWaveY, mode: "lines", line: { color: "#9b7bff" } }
         ], {
+          autosize: true,
           margin: { l: 40, r: 10, t: 30, b: 35 },
           title: "Waveform (full)",
           xaxis: { title: "Time (s)", range: [0, fullRange] },
           yaxis: { title: "Amplitude", range: [-1.1, 1.1] },
           paper_bgcolor: "rgba(0,0,0,0)",
           plot_bgcolor: "rgba(0,0,0,0)"
-        }, { displayModeBar: false });
+        }, { displayModeBar: false, responsive: true });
 
         const spectrum = computeIdealSpectrum(params);
         Plotly.react("spectrumPlot", [
@@ -580,13 +602,52 @@
             line: { color: "#f58b54" }
           }
         ], {
+          autosize: true,
           margin: { l: 40, r: 10, t: 30, b: 35 },
           title: "Spectrum",
           xaxis: { title: "Frequency (Hz)", range: [0, 10000] },
           yaxis: { title: "Amplitude", range: [0, 1.05] },
           paper_bgcolor: "rgba(0,0,0,0)",
           plot_bgcolor: "rgba(0,0,0,0)"
-        }, { displayModeBar: false });
+        }, { displayModeBar: false, responsive: true });
+
+        window.requestAnimationFrame(resizeAllPlots);
+      }
+
+      function resizeAllPlots() {
+        if (!window.Plotly) return;
+        const ids = ["waveformPlot", "waveformFullPlot", "spectrumPlot"];
+        ids.forEach((id) => {
+          const el = document.getElementById(id);
+          if (el && el._fullLayout) {
+            Plotly.Plots.resize(el);
+          }
+        });
+      }
+
+      function installPlotlyAutoResize() {
+        let rafId = null;
+        const schedule = () => {
+          if (rafId) window.cancelAnimationFrame(rafId);
+          rafId = window.requestAnimationFrame(() => {
+            rafId = null;
+            resizeAllPlots();
+          });
+        };
+
+        window.addEventListener("resize", schedule, { passive: true });
+        window.addEventListener("orientationchange", schedule, { passive: true });
+
+        const main = document.querySelector("main");
+        if (main && "ResizeObserver" in window) {
+          const ro = new ResizeObserver(schedule);
+          ro.observe(main);
+        }
+
+        schedule();
+        window.setTimeout(schedule, 0);
+        window.setTimeout(schedule, 150);
+        window.setTimeout(schedule, 600);
       }
 
       function collectParams() {
@@ -802,42 +863,7 @@
       buildHarmonics();
       wireControls();
       setDefaults();
-
-      function installFitToViewport() {
-        const root = document.getElementById("fitRoot");
-        const content = document.getElementById("fitContent");
-        if (!root || !content) return;
-
-        let rafId = null;
-        const recompute = () => {
-          if (rafId) window.cancelAnimationFrame(rafId);
-          rafId = window.requestAnimationFrame(() => {
-            const contentWidth = content.offsetWidth;
-            const contentHeight = content.offsetHeight;
-            const viewportWidth = root.clientWidth;
-            const viewportHeight = root.clientHeight;
-            if (!contentWidth || !contentHeight || !viewportWidth || !viewportHeight) return;
-            const scale = viewportWidth / contentWidth < viewportHeight / contentHeight
-              ? viewportWidth / contentWidth
-              : viewportHeight / contentHeight;
-            content.style.setProperty("--fit-scale", String(scale));
-          });
-        };
-
-        window.addEventListener("resize", recompute, { passive: true });
-        window.addEventListener("orientationchange", recompute, { passive: true });
-
-        const ro = new ResizeObserver(recompute);
-        ro.observe(content);
-
-        recompute();
-        window.setTimeout(recompute, 0);
-        window.setTimeout(recompute, 100);
-        window.setTimeout(recompute, 300);
-        window.setTimeout(recompute, 1000);
-      }
-
-      installFitToViewport();
+      installPlotlyAutoResize();
     </script>
         <div class="footer">
           Copyright: Peter Harrison (2026)
