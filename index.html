@@ -385,26 +385,36 @@
       function stopAudio() {
         if (state.source && state.gain && state.audioCtx) {
           const now = state.audioCtx.currentTime;
-          state.gain.gain.cancelScheduledValues(now);
-          state.gain.gain.setValueAtTime(state.gain.gain.value, now);
-          state.gain.gain.linearRampToValueAtTime(0, now + 0.01);
-          state.source.stop(now + 0.02);
-          state.source.disconnect();
-          state.gain.disconnect();
-          state.source = null;
-          state.gain = null;
+          const stopAt = now + 0.02;
+          const oldSource = state.source;
+          const oldGain = state.gain;
+          oldGain.gain.cancelScheduledValues(now);
+          oldGain.gain.setValueAtTime(oldGain.gain.value, now);
+          oldGain.gain.linearRampToValueAtTime(0, now + 0.01);
+          oldSource.stop(stopAt);
+          oldSource.onended = () => {
+            oldSource.disconnect();
+            oldGain.disconnect();
+            if (state.source === oldSource) state.source = null;
+            if (state.gain === oldGain) state.gain = null;
+          };
+          return stopAt;
         }
+        if (state.audioCtx) {
+          return state.audioCtx.currentTime;
+        }
+        return 0;
       }
 
       function playAudio(buffer, sampleRate) {
         const ctx = ensureAudioContext();
-        stopAudio();
+        const startAt = stopAudio();
         const audioBuffer = ctx.createBuffer(1, buffer.length, sampleRate);
         audioBuffer.copyToChannel(buffer, 0);
         const source = ctx.createBufferSource();
         source.buffer = audioBuffer;
         const gain = ctx.createGain();
-        const now = ctx.currentTime;
+        const now = Math.max(ctx.currentTime, startAt);
         const fadeIn = 0.01;
         const fadeOut = 0.01;
         gain.gain.setValueAtTime(0, now);
@@ -413,7 +423,7 @@
         gain.gain.linearRampToValueAtTime(0, now + audioBuffer.duration);
         source.connect(gain);
         gain.connect(ctx.destination);
-        source.start();
+        source.start(now);
         state.source = source;
         state.gain = gain;
       }
