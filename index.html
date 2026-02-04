@@ -210,15 +210,41 @@
       }
 
       .harmonics {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 12px;
+        column-count: var(--harmonics-columns, 2);
+        column-gap: 12px;
       }
 
-      .harmonics-column {
-        display: grid;
-        gap: 10px;
+      /* Spectrum tab: keep harmonics from dominating vertical space. */
+      #spectrumPanel .harmonics {
+        max-height: min(420px, 42vh);
+        overflow-y: auto;
+        overscroll-behavior: contain;
         padding-right: 6px;
+      }
+
+      #spectrumPanel .harmonics > .control-group {
+        break-inside: avoid;
+        margin-bottom: 10px;
+      }
+
+      @media (min-width: 640px) {
+        #spectrumPanel .harmonics {
+          --harmonics-columns: 3;
+        }
+      }
+
+      @media (max-width: 960px) {
+        #spectrumPanel .harmonics {
+          max-height: min(320px, 34vh);
+        }
+
+        #spectrumPanel .control-group {
+          gap: 8px;
+        }
+
+        #spectrumPanel label {
+          font-size: 12px;
+        }
       }
 
       .plot-grid {
@@ -329,10 +355,7 @@
             </div>
 
             <div class="control-group">
-              <div class="harmonics">
-                <div class="harmonics-column" id="harmonicsLeft"></div>
-                <div class="harmonics-column" id="harmonicsRight"></div>
-              </div>
+              <div class="harmonics" id="harmonicsGrid"></div>
             </div>
             </div>
 
@@ -755,8 +778,8 @@
       }
 
       function buildHarmonics() {
-        const leftColumn = document.getElementById("harmonicsLeft");
-        const rightColumn = document.getElementById("harmonicsRight");
+        const grid = document.getElementById("harmonicsGrid");
+        if (!grid) return;
         for (let i = 0; i < 20; i += 1) {
           const wrapper = document.createElement("div");
           wrapper.className = "control-group";
@@ -791,11 +814,7 @@
           });
           wrapper.appendChild(row);
           wrapper.appendChild(slider);
-          if (i < 10) {
-            leftColumn.appendChild(wrapper);
-          } else {
-            rightColumn.appendChild(wrapper);
-          }
+          grid.appendChild(wrapper);
         }
       }
 
