@@ -140,7 +140,12 @@
 
       .plot-grid {
         display: grid;
-        grid-template-rows: 1fr 1fr;
+        gap: 16px;
+      }
+
+      .plot-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
         gap: 16px;
       }
 
@@ -241,7 +246,10 @@
       </section>
 
       <section class="plot-grid">
-        <div class="plot-card" id="waveformPlot"></div>
+        <div class="plot-row">
+          <div class="plot-card" id="waveformPlot"></div>
+          <div class="plot-card" id="waveformFullPlot"></div>
+        </div>
         <div class="plot-card" id="spectrumPlot"></div>
       </section>
     </main>
@@ -457,8 +465,29 @@
           { x: waveX, y: waveY, mode: "lines", line: { color: "#4f8cff" } }
         ], {
           margin: { l: 40, r: 10, t: 30, b: 35 },
-          title: "Waveform",
+          title: "Waveform (zoomed)",
           xaxis: { title: "Time (s)" },
+          yaxis: { title: "Amplitude", range: [-1.1, 1.1] },
+          paper_bgcolor: "rgba(0,0,0,0)",
+          plot_bgcolor: "rgba(0,0,0,0)"
+        }, { displayModeBar: false });
+
+        const fullWaveX = [];
+        const fullWaveY = [];
+        for (let i = 0; i < samples.length; i += 1) {
+          fullWaveX.push(i / params.sampleRate);
+          fullWaveY.push(samples[i]);
+        }
+        const durationMax = parseFloat(document.getElementById("duration").max);
+        const releaseMax = parseFloat(document.getElementById("release").max);
+        const fullRange = durationMax + releaseMax;
+
+        Plotly.react("waveformFullPlot", [
+          { x: fullWaveX, y: fullWaveY, mode: "lines", line: { color: "#9b7bff" } }
+        ], {
+          margin: { l: 40, r: 10, t: 30, b: 35 },
+          title: "Waveform (full)",
+          xaxis: { title: "Time (s)", range: [0, fullRange] },
           yaxis: { title: "Amplitude", range: [-1.1, 1.1] },
           paper_bgcolor: "rgba(0,0,0,0)",
           plot_bgcolor: "rgba(0,0,0,0)"
