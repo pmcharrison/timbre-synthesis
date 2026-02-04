@@ -328,7 +328,11 @@
         } = params;
 
         const attackC = clamp(attack, 0, duration);
-        const decayC = clamp(decay, 0, Math.max(0, duration - attackC));
+        let decayC = clamp(decay, 0, Math.max(0, duration - attackC));
+        const minSegment = 0.005;
+        if (decayC === 0 && sustain < 1) {
+          decayC = Math.min(minSegment, Math.max(0, duration - attackC));
+        }
         const hold = Math.max(0, duration - attackC - decayC);
         const x = [
           0,
