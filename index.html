@@ -35,6 +35,10 @@
         color: var(--text);
       }
 
+      [hidden] {
+        display: none !important;
+      }
+
       html,
       body {
         height: 100%;
@@ -191,14 +195,22 @@
       }
 
       button.secondary {
-        background: transparent;
-        color: var(--text);
-        border: 1px solid var(--border);
+        background: rgba(255, 255, 255, 0.92);
+        color: #111;
+        border: 1px solid rgba(255, 255, 255, 0.85);
       }
 
       button:disabled {
         opacity: 0.5;
         cursor: not-allowed;
+      }
+
+      button.secondary:hover:enabled {
+        background: white;
+      }
+
+      button.secondary:active:enabled {
+        background: rgba(255, 255, 255, 0.8);
       }
 
       .toggle {
@@ -220,6 +232,22 @@
         overflow-y: auto;
         overscroll-behavior: contain;
         padding-right: 6px;
+      }
+
+      #spectrumPanel .harmonics-pager {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        margin-top: 10px;
+      }
+
+      #spectrumPanel .harmonics-page {
+        flex: 1 1 auto;
+        text-align: center;
+        font-size: 12px;
+        color: var(--muted);
+        font-variant-numeric: tabular-nums;
       }
 
       #spectrumPanel .harmonics > .control-group {
@@ -356,6 +384,15 @@
 
             <div class="control-group">
               <div class="harmonics" id="harmonicsGrid"></div>
+              <div class="harmonics-pager" id="harmonicsPager">
+                <button id="harmonicsPrev" class="secondary" type="button">
+                  Prev
+                </button>
+                <div class="harmonics-page" id="harmonicsPageLabel" aria-live="polite"></div>
+                <button id="harmonicsNext" class="secondary" type="button">
+                  Next
+                </button>
+              </div>
             </div>
             </div>
 
@@ -405,7 +442,10 @@
         renderPending: false,
         pendingPlay: false,
         autoPlay: true,
-        autoRender: true
+        autoRender: true,
+        harmonicsPage: 0,
+        harmonicsPerPage: null,
+        harmonicsFirstPageHeight: null
       };
 
       function setValue(id, value, digits = 3) {
@@ -818,6 +858,79 @@
         }
       }
 
+      function computeHarmonicsPerPage() {
+        const w = window.innerWidth;
+        if (w < 420) return 6;
+        if (w < 720) return 9;
+        return 12;
+      }
+
+      function updateHarmonicsPagination() {
+        const grid = document.getElementById("harmonicsGrid");
+        if (!grid) return;
+        const items = Array.from(grid.children);
+        const total = items.length;
+        if (!total) return;
+
+        const perPage = computeHarmonicsPerPage();
+        state.harmonicsPerPage = perPage;
+        const totalPages = Math.max(1, Math.ceil(total / perPage));
+        state.harmonicsPage = clamp(state.harmonicsPage, 0, totalPages - 1);
+
+        const start = state.harmonicsPage * perPage;
+        const end = Math.min(total, start + perPage);
+
+        grid.style.visibility = "hidden";
+        items.forEach((el, idx) => {
+          el.hidden = idx >= perPage;
+        });
+
+        requestAnimationFrame(() => {
+          state.harmonicsFirstPageHeight = grid.scrollHeight;
+          items.forEach((el, idx) => {
+            el.hidden = idx < start || idx >= end;
+          });
+          grid.style.minHeight = state.harmonicsFirstPageHeight + "px";
+          grid.style.visibility = "";
+
+          const pager = document.getElementById("harmonicsPager");
+          if (pager) pager.hidden = totalPages <= 1;
+
+          const label = document.getElementById("harmonicsPageLabel");
+          if (label) {
+            label.textContent = `Harmonics ${start + 1}\u2013${end} of ${total}`;
+          }
+
+          const prevBtn = document.getElementById("harmonicsPrev");
+          const nextBtn = document.getElementById("harmonicsNext");
+          if (prevBtn) prevBtn.disabled = state.harmonicsPage === 0;
+          if (nextBtn) nextBtn.disabled = state.harmonicsPage >= totalPages - 1;
+        });
+      }
+
+      function installHarmonicsPagination() {
+        const prevBtn = document.getElementById("harmonicsPrev");
+        const nextBtn = document.getElementById("harmonicsNext");
+        const pager = document.getElementById("harmonicsPager");
+        if (!prevBtn || !nextBtn || !pager) return;
+
+        prevBtn.addEventListener("click", () => {
+          state.harmonicsPage = Math.max(0, state.harmonicsPage - 1);
+          updateHarmonicsPagination();
+        });
+
+        nextBtn.addEventListener("click", () => {
+          state.harmonicsPage += 1;
+          updateHarmonicsPagination();
+        });
+
+        window.addEventListener("resize", () => {
+          updateHarmonicsPagination();
+        }, { passive: true });
+
+        updateHarmonicsPagination();
+      }
+
       function wireControls() {
         const ids = [
           "f0", "duration", "attack", "decay", "sustain",
@@ -875,11 +988,15 @@
             if (target) {
               target.hidden = false;
             }
+            if (targetId === "spectrumPanel") {
+              updateHarmonicsPagination();
+            }
           });
         });
       }
 
       buildHarmonics();
+      installHarmonicsPagination();
       wireControls();
       setDefaults();
       installPlotlyAutoResize();
