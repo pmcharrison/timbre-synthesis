@@ -104,6 +104,7 @@
         border: 1px solid var(--border);
         border-radius: 10px;
         padding: 10px 12px;
+        margin-bottom: 12px;
         background: rgba(0, 0, 0, 0.05);
         font-size: 12px;
         color: var(--muted);
@@ -227,6 +228,9 @@
       }
 
       /* Spectrum tab: keep harmonics from dominating vertical space. */
+      #spectrumPanel > .control-group + .control-group {
+        margin-top: 35px;
+      }
       #spectrumPanel .harmonics {
         max-height: min(420px, 42vh);
         overflow-y: auto;
