@@ -52,7 +52,7 @@
 
       main {
         display: grid;
-        grid-template-columns: 360px 1fr;
+        grid-template-columns: 810px 1fr;
         gap: 20px;
         padding: 20px 24px 32px 24px;
       }
@@ -64,9 +64,24 @@
         padding: 16px;
       }
 
+      .note-box {
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 10px 12px;
+        background: rgba(0, 0, 0, 0.05);
+        font-size: 12px;
+        color: var(--muted);
+      }
+
       .controls {
         display: flex;
         flex-direction: column;
+        gap: 16px;
+      }
+
+      .control-columns {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
         gap: 16px;
       }
 
@@ -133,6 +148,14 @@
       }
 
       .harmonics {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+      }
+
+      .harmonics-column {
+        display: grid;
+        gap: 10px;
         max-height: 340px;
         overflow: auto;
         padding-right: 6px;
@@ -175,64 +198,54 @@
 
     <main>
       <section class="controls">
-        <div class="control-group">
-          <div class="row">
-            <label for="f0">Fundamental frequency (Hz)</label>
-            <div class="value" id="f0Value"></div>
-          </div>
-          <input id="f0" type="range" min="50" max="2000" step="1" />
+        <div class="note-box">
+          Attack: time to reach full level. Decay: time to drop to sustain.
+          Sustain: level held while note is on. Release: time to fade to zero.
         </div>
+        <div class="control-columns">
+          <div class="control-group">
+            <div class="row">
+              <label for="f0">Fundamental frequency (Hz)</label>
+              <div class="value" id="f0Value"></div>
+            </div>
+            <input id="f0" type="range" min="50" max="2000" step="1" />
+            <div class="row">
+              <label for="duration">Duration (seconds, excludes release)</label>
+              <div class="value" id="durationValue"></div>
+            </div>
+            <input id="duration" type="range" min="0.1" max="4" step="0.01" />
+          </div>
 
-        <div class="control-group">
-          <div class="row">
-            <label for="duration">Duration (seconds, excludes release)</label>
-            <div class="value" id="durationValue"></div>
+          <div class="control-group">
+            <div class="row">
+              <label for="attack">Attack (seconds)</label>
+              <div class="value" id="attackValue"></div>
+            </div>
+            <input id="attack" type="range" min="0" max="1" step="0.01" />
+            <div class="row">
+              <label for="decay">Decay (seconds)</label>
+              <div class="value" id="decayValue"></div>
+            </div>
+            <input id="decay" type="range" min="0" max="1" step="0.01" />
+            <div class="row">
+              <label for="sustain">Sustain (0–1)</label>
+              <div class="value" id="sustainValue"></div>
+            </div>
+            <input id="sustain" type="range" min="0" max="1" step="0.01" />
+            <div class="row">
+              <label for="release">Release (seconds)</label>
+              <div class="value" id="releaseValue"></div>
+            </div>
+            <input id="release" type="range" min="0" max="2" step="0.01" />
           </div>
-          <input id="duration" type="range" min="0.1" max="4" step="0.01" />
-        </div>
-
-        <div class="control-group">
-          <div class="row">
-            <label for="attack">Attack (seconds)</label>
-            <div class="value" id="attackValue"></div>
-          </div>
-          <input id="attack" type="range" min="0" max="1" step="0.01" />
-          <div class="row">
-            <label for="decay">Decay (seconds)</label>
-            <div class="value" id="decayValue"></div>
-          </div>
-          <input id="decay" type="range" min="0" max="1" step="0.01" />
-          <div class="row">
-            <label for="sustain">Sustain (0–1)</label>
-            <div class="value" id="sustainValue"></div>
-          </div>
-          <input id="sustain" type="range" min="0" max="1" step="0.01" />
-          <div class="row">
-            <label for="release">Release (seconds)</label>
-            <div class="value" id="releaseValue"></div>
-          </div>
-          <input id="release" type="range" min="0" max="2" step="0.01" />
-        </div>
-
-        <div class="control-group">
-          <div class="row">
-            <label for="sampleRate">Sample rate (Hz)</label>
-            <div class="value" id="sampleRateValue"></div>
-          </div>
-          <input id="sampleRate" type="range" min="8000" max="48000" step="100" />
-        </div>
-
-        <div class="control-group">
-          <div class="row">
-            <label for="waveWindow">Waveform window (ms)</label>
-            <div class="value" id="waveWindowValue"></div>
-          </div>
-          <input id="waveWindow" type="range" min="5" max="200" step="1" />
         </div>
 
         <div class="control-group">
           <label>Harmonic amplitudes</label>
-          <div class="harmonics" id="harmonics"></div>
+          <div class="harmonics">
+            <div class="harmonics-column" id="harmonicsLeft"></div>
+            <div class="harmonics-column" id="harmonicsRight"></div>
+          </div>
         </div>
 
         <div class="buttons">
@@ -242,7 +255,6 @@
           <button id="exportBtn" class="secondary">Export CSV</button>
         </div>
 
-        <div id="status">Idle.</div>
       </section>
 
       <section class="plot-grid">
@@ -254,17 +266,13 @@
       </section>
     </main>
 
-    <div class="footer">
-      Release time is appended to the duration (duration does not include release).
-    </div>
-
     <script>
       const DEFAULTS = {
         f0: 300,
         duration: 1.5,
-        attack: 0.05,
+        attack: 0.1,
         decay: 0.0,
-        sustain: 1.0,
+        sustain: 0.7,
         release: 0.05,
         sampleRate: 44100,
         waveWindowMs: 50,
@@ -523,8 +531,8 @@
           decay: parseFloat(document.getElementById("decay").value),
           sustain: parseFloat(document.getElementById("sustain").value),
           release: parseFloat(document.getElementById("release").value),
-          sampleRate: parseInt(document.getElementById("sampleRate").value, 10),
-          waveWindowMs: parseFloat(document.getElementById("waveWindow").value),
+          sampleRate: DEFAULTS.sampleRate,
+          waveWindowMs: DEFAULTS.waveWindowMs,
           amplitudes
         };
       }
@@ -536,8 +544,6 @@
         setValue("decayValue", params.decay, 2);
         setValue("sustainValue", params.sustain, 2);
         setValue("releaseValue", params.release, 2);
-        setValue("sampleRateValue", params.sampleRate, 0);
-        setValue("waveWindowValue", params.waveWindowMs, 0);
         for (let i = 0; i < 20; i += 1) {
           setValue(`ampValue_${i}`, params.amplitudes[i], 3);
         }
@@ -559,7 +565,6 @@
           playAudio(samples, params.sampleRate);
           state.pendingPlay = false;
         }
-          document.getElementById("status").textContent = `Rendered ${samples.length} samples.`;
         });
       }
 
@@ -597,8 +602,6 @@
         document.getElementById("decay").value = DEFAULTS.decay;
         document.getElementById("sustain").value = DEFAULTS.sustain;
         document.getElementById("release").value = DEFAULTS.release;
-        document.getElementById("sampleRate").value = DEFAULTS.sampleRate;
-        document.getElementById("waveWindow").value = DEFAULTS.waveWindowMs;
         for (let i = 0; i < 20; i += 1) {
           document.getElementById(`amp_${i}`).value = DEFAULTS.amplitudes[i];
         }
@@ -606,7 +609,8 @@
       }
 
       function buildHarmonics() {
-        const container = document.getElementById("harmonics");
+        const leftColumn = document.getElementById("harmonicsLeft");
+        const rightColumn = document.getElementById("harmonicsRight");
         for (let i = 0; i < 20; i += 1) {
           const wrapper = document.createElement("div");
           wrapper.className = "control-group";
@@ -641,14 +645,18 @@
           });
           wrapper.appendChild(row);
           wrapper.appendChild(slider);
-          container.appendChild(wrapper);
+          if (i < 10) {
+            leftColumn.appendChild(wrapper);
+          } else {
+            rightColumn.appendChild(wrapper);
+          }
         }
       }
 
       function wireControls() {
         const ids = [
           "f0", "duration", "attack", "decay", "sustain",
-          "release", "sampleRate", "waveWindow"
+          "release"
         ];
         ids.forEach((id) => {
           const input = document.getElementById(id);
@@ -686,5 +694,8 @@
       wireControls();
       setDefaults();
     </script>
+    <div class="footer">
+      Copyright: Peter Harrison (2026)
+    </div>
   </body>
 </html>
