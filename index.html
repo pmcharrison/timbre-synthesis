@@ -296,6 +296,7 @@
           <button id="stopBtn" class="secondary">Stop</button>
           <button id="resetBtn" class="secondary">Reset</button>
           <button id="exportBtn" class="secondary">Export CSV</button>
+          <button id="downloadBtn" class="secondary">Download WAV</button>
         </div>
 
       </section>
@@ -309,6 +310,7 @@
       </section>
     </main>
 
+    <script src="wav.js"></script>
     <script>
       const DEFAULTS = {
         f0: 300,
@@ -628,14 +630,29 @@
         const row = headers.map((h) => data[h]);
         const csv = `${headers.join(",")}\n${row.join(",")}\n`;
         const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+        triggerDownload(blob, "params.csv");
+      }
+
+      function triggerDownload(blob, filename) {
         const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
         link.href = url;
-        link.download = "params.csv";
+        link.download = filename;
         document.body.appendChild(link);
         link.click();
         link.remove();
         URL.revokeObjectURL(url);
+      }
+
+      function exportWav(params) {
+        let samples = state.buffer;
+        if (!samples) {
+          samples = renderAudio(params);
+          state.buffer = samples;
+        }
+        const wavData = buildWavData(samples, params.sampleRate);
+        const blob = new Blob([wavData], { type: "audio/wav" });
+        triggerDownload(blob, "timbre.wav");
       }
 
       function setDefaults() {
@@ -730,6 +747,9 @@
         });
         document.getElementById("exportBtn").addEventListener("click", () => {
           exportCsv(collectParams());
+        });
+        document.getElementById("downloadBtn").addEventListener("click", () => {
+          exportWav(collectParams());
         });
 
         const tabButtons = Array.from(document.querySelectorAll(".tab-button"));
