@@ -35,6 +35,29 @@
         color: var(--text);
       }
 
+      html,
+      body {
+        height: 100%;
+        overflow: hidden;
+      }
+
+      #fitRoot {
+        width: 100vw;
+        height: 100vh;
+        overflow: hidden;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-sizing: border-box;
+        padding: env(safe-area-inset-top) env(safe-area-inset-right)
+          env(safe-area-inset-bottom) env(safe-area-inset-left);
+      }
+
+      #fitContent {
+        transform: scale(var(--fit-scale, 1));
+        transform-origin: center center;
+      }
+
       header {
         padding: 20px 24px 8px 24px;
         border-bottom: 1px solid var(--border);
@@ -217,98 +240,100 @@
     </style>
   </head>
   <body>
-    <header>
-      <h1>Timbre synthesis</h1>
-      <div class="subtitle">
-        Additive harmonics + ADSR envelope, rendered in the browser.
-      </div>
-    </header>
-
-    <main>
-      <section class="controls">
-        <div class="tab-list" role="tablist" aria-label="Slider groups">
-          <button class="tab-button active" id="envelopeTab" role="tab" aria-controls="envelopePanel" aria-selected="true" data-target="envelopePanel">
-            Envelope
-          </button>
-          <button class="tab-button" id="spectrumTab" role="tab" aria-controls="spectrumPanel" aria-selected="false" data-target="spectrumPanel">
-            Spectrum
-          </button>
-        </div>
-
-        <div class="tab-panel" id="envelopePanel" role="tabpanel" aria-labelledby="envelopeTab">
-        <div class="note-box">
-          Attack: time to reach full level. Decay: time to drop to sustain.
-          Sustain: level held while note is on. Release: time to fade to zero.
-        </div>
-        <div class="control-columns">
-          <div class="control-group">
-            <div class="row">
-              <label for="duration">Duration (seconds, excludes release)</label>
-              <div class="value" id="durationValue"></div>
-            </div>
-            <input id="duration" type="range" min="0.1" max="4" step="0.01" />
+    <div id="fitRoot">
+      <div id="fitContent">
+        <header>
+          <h1>Timbre synthesis</h1>
+          <div class="subtitle">
+            Additive harmonics + ADSR envelope, rendered in the browser.
           </div>
+        </header>
 
-          <div class="control-group">
-            <div class="row">
-              <label for="attack">Attack (seconds)</label>
-              <div class="value" id="attackValue"></div>
+        <main>
+          <section class="controls">
+            <div class="tab-list" role="tablist" aria-label="Slider groups">
+              <button class="tab-button active" id="envelopeTab" role="tab" aria-controls="envelopePanel" aria-selected="true" data-target="envelopePanel">
+                Envelope
+              </button>
+              <button class="tab-button" id="spectrumTab" role="tab" aria-controls="spectrumPanel" aria-selected="false" data-target="spectrumPanel">
+                Spectrum
+              </button>
             </div>
-            <input id="attack" type="range" min="0" max="1" step="0.01" />
-            <div class="row">
-              <label for="decay">Decay (seconds)</label>
-              <div class="value" id="decayValue"></div>
+
+            <div class="tab-panel" id="envelopePanel" role="tabpanel" aria-labelledby="envelopeTab">
+            <div class="note-box">
+              Attack: time to reach full level. Decay: time to drop to sustain.
+              Sustain: level held while note is on. Release: time to fade to zero.
             </div>
-            <input id="decay" type="range" min="0" max="1" step="0.01" />
-            <div class="row">
-              <label for="sustain">Sustain (0–1)</label>
-              <div class="value" id="sustainValue"></div>
+            <div class="control-columns">
+              <div class="control-group">
+                <div class="row">
+                  <label for="duration">Duration (seconds, excludes release)</label>
+                  <div class="value" id="durationValue"></div>
+                </div>
+                <input id="duration" type="range" min="0.1" max="4" step="0.01" />
+              </div>
+
+              <div class="control-group">
+                <div class="row">
+                  <label for="attack">Attack (seconds)</label>
+                  <div class="value" id="attackValue"></div>
+                </div>
+                <input id="attack" type="range" min="0" max="1" step="0.01" />
+                <div class="row">
+                  <label for="decay">Decay (seconds)</label>
+                  <div class="value" id="decayValue"></div>
+                </div>
+                <input id="decay" type="range" min="0" max="1" step="0.01" />
+                <div class="row">
+                  <label for="sustain">Sustain (0–1)</label>
+                  <div class="value" id="sustainValue"></div>
+                </div>
+                <input id="sustain" type="range" min="0" max="1" step="0.01" />
+                <div class="row">
+                  <label for="release">Release (seconds)</label>
+                  <div class="value" id="releaseValue"></div>
+                </div>
+                <input id="release" type="range" min="0" max="2" step="0.01" />
+              </div>
             </div>
-            <input id="sustain" type="range" min="0" max="1" step="0.01" />
-            <div class="row">
-              <label for="release">Release (seconds)</label>
-              <div class="value" id="releaseValue"></div>
             </div>
-            <input id="release" type="range" min="0" max="2" step="0.01" />
-          </div>
-        </div>
-        </div>
 
-        <div class="tab-panel" id="spectrumPanel" role="tabpanel" aria-labelledby="spectrumTab" hidden>
-        <div class="control-group">
-          <div class="row">
-            <label for="f0">Fundamental frequency (Hz)</label>
-            <div class="value" id="f0Value"></div>
-          </div>
-          <input id="f0" type="range" min="50" max="2000" step="1" />
-        </div>
+            <div class="tab-panel" id="spectrumPanel" role="tabpanel" aria-labelledby="spectrumTab" hidden>
+            <div class="control-group">
+              <div class="row">
+                <label for="f0">Fundamental frequency (Hz)</label>
+                <div class="value" id="f0Value"></div>
+              </div>
+              <input id="f0" type="range" min="50" max="2000" step="1" />
+            </div>
 
-        <div class="control-group">
-          <div class="harmonics">
-            <div class="harmonics-column" id="harmonicsLeft"></div>
-            <div class="harmonics-column" id="harmonicsRight"></div>
-          </div>
-        </div>
-        </div>
+            <div class="control-group">
+              <div class="harmonics">
+                <div class="harmonics-column" id="harmonicsLeft"></div>
+                <div class="harmonics-column" id="harmonicsRight"></div>
+              </div>
+            </div>
+            </div>
 
-        <div class="buttons">
-          <button id="playBtn">Play</button>
-          <button id="stopBtn" class="secondary">Stop</button>
-          <button id="resetBtn" class="secondary">Reset</button>
-          <button id="exportBtn" class="secondary">Export CSV</button>
-          <button id="downloadBtn" class="secondary">Download WAV</button>
-        </div>
+            <div class="buttons">
+              <button id="playBtn">Play</button>
+              <button id="stopBtn" class="secondary">Stop</button>
+              <button id="resetBtn" class="secondary">Reset</button>
+              <button id="exportBtn" class="secondary">Export CSV</button>
+              <button id="downloadBtn" class="secondary">Download WAV</button>
+            </div>
 
-      </section>
+          </section>
 
-      <section class="plot-grid">
-        <div class="plot-row">
-          <div class="plot-card" id="waveformPlot"></div>
-          <div class="plot-card" id="waveformFullPlot"></div>
-        </div>
-        <div class="plot-card" id="spectrumPlot"></div>
-      </section>
-    </main>
+          <section class="plot-grid">
+            <div class="plot-row">
+              <div class="plot-card" id="waveformPlot"></div>
+              <div class="plot-card" id="waveformFullPlot"></div>
+            </div>
+            <div class="plot-card" id="spectrumPlot"></div>
+          </section>
+        </main>
 
     <script src="wav.js"></script>
     <script>
@@ -777,9 +802,47 @@
       buildHarmonics();
       wireControls();
       setDefaults();
+
+      function installFitToViewport() {
+        const root = document.getElementById("fitRoot");
+        const content = document.getElementById("fitContent");
+        if (!root || !content) return;
+
+        let rafId = null;
+        const recompute = () => {
+          if (rafId) window.cancelAnimationFrame(rafId);
+          rafId = window.requestAnimationFrame(() => {
+            const contentWidth = content.offsetWidth;
+            const contentHeight = content.offsetHeight;
+            const viewportWidth = root.clientWidth;
+            const viewportHeight = root.clientHeight;
+            if (!contentWidth || !contentHeight || !viewportWidth || !viewportHeight) return;
+            const scale = viewportWidth / contentWidth < viewportHeight / contentHeight
+              ? viewportWidth / contentWidth
+              : viewportHeight / contentHeight;
+            content.style.setProperty("--fit-scale", String(scale));
+          });
+        };
+
+        window.addEventListener("resize", recompute, { passive: true });
+        window.addEventListener("orientationchange", recompute, { passive: true });
+
+        const ro = new ResizeObserver(recompute);
+        ro.observe(content);
+
+        recompute();
+        window.setTimeout(recompute, 0);
+        window.setTimeout(recompute, 100);
+        window.setTimeout(recompute, 300);
+        window.setTimeout(recompute, 1000);
+      }
+
+      installFitToViewport();
     </script>
-    <div class="footer">
-      Copyright: Peter Harrison (2026)
+        <div class="footer">
+          Copyright: Peter Harrison (2026)
+        </div>
+      </div>
     </div>
   </body>
 </html>
