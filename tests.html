@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Timbre synthesis tests</title>
+    <style>
+      body {
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        padding: 24px;
+        background: #111;
+        color: #f0f0f0;
+      }
+
+      h1 {
+        margin-top: 0;
+      }
+
+      button {
+        background: #4f8cff;
+        color: white;
+        border: none;
+        border-radius: 8px;
+        padding: 8px 12px;
+        cursor: pointer;
+      }
+
+      .results {
+        margin-top: 16px;
+        padding: 12px;
+        border: 1px solid #2a2a2a;
+        border-radius: 8px;
+        background: #1a1a1a;
+      }
+
+      .pass {
+        color: #8ee28e;
+      }
+
+      .fail {
+        color: #ff8a8a;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Timbre synthesis tests</h1>
+    <p>In-browser sanity checks for synthesis math.</p>
+    <button id="runBtn">Run tests</button>
+    <div class="results" id="results"></div>
+
+    <script>
+      function approxEqual(a, b, epsilon = 1e-6) {
+        return Math.abs(a - b) <= epsilon;
+      }
+
+      function clamp(value, min, max) {
+        return Math.max(min, Math.min(max, value));
+      }
+
+      function pureTone(frequency, sampleRate, duration, amplitude) {
+        const nSamples = Math.max(1, Math.floor(duration * sampleRate));
+        const buffer = new Float32Array(nSamples);
+        for (let i = 0; i < nSamples; i += 1) {
+          const t = i / sampleRate;
+          buffer[i] = amplitude * Math.sin(2 * Math.PI * frequency * t);
+        }
+        return buffer;
+      }
+
+      function mixWaves(waves) {
+        if (!waves.length) return new Float32Array(0);
+        const n = waves[0].length;
+        const mixed = new Float32Array(n);
+        for (const wave of waves) {
+          for (let i = 0; i < n; i += 1) {
+            mixed[i] += wave[i];
+          }
+        }
+        let maxAbs = 0;
+        for (let i = 0; i < n; i += 1) {
+          maxAbs = Math.max(maxAbs, Math.abs(mixed[i]));
+        }
+        if (maxAbs === 0) return mixed;
+        for (let i = 0; i < n; i += 1) {
+          mixed[i] /= maxAbs;
+        }
+        return mixed;
+      }
+
+      function applyAdsr(wave, params) {
+        const {
+          attack,
+          decay,
+          sustain,
+          release,
+          duration,
+          sampleRate
+        } = params;
+
+        const attackC = clamp(attack, 0, duration);
+        const decayC = clamp(decay, 0, Math.max(0, duration - attackC));
+        const hold = Math.max(0, duration - attackC - decayC);
+        const x = [
+          0,
+          attackC,
+          attackC + decayC,
+          attackC + decayC + hold,
+          attackC + decayC + hold + release
+        ];
+        const y = [0, 1, sustain, sustain, 0];
+
+        const output = new Float32Array(wave.length);
+        for (let i = 0; i < wave.length; i += 1) {
+          const t = i / sampleRate;
+          let j = 0;
+          while (j < x.length - 1 && t > x[j + 1]) j += 1;
+          const x0 = x[j];
+          const x1 = x[Math.min(j + 1, x.length - 1)];
+          const y0 = y[j];
+          const y1 = y[Math.min(j + 1, y.length - 1)];
+          const env = x1 === x0 ? y1 : y0 + ((t - x0) / (x1 - x0)) * (y1 - y0);
+          output[i] = wave[i] * env;
+        }
+        return output;
+      }
+
+      function runTests() {
+        const results = [];
+
+        const tone = pureTone(1, 4, 1, 1);
+        results.push({
+          name: "pureTone generates expected samples",
+          pass: approxEqual(tone[0], 0) &&
+            approxEqual(tone[1], 1) &&
+            approxEqual(tone[2], 0) &&
+            approxEqual(tone[3], -1)
+        });
+
+        const mixed = mixWaves([
+          new Float32Array([0.5, 0.5]),
+          new Float32Array([0.5, 0.5])
+        ]);
+        results.push({
+          name: "mixWaves normalizes summed amplitude",
+          pass: approxEqual(mixed[0], 1) && approxEqual(mixed[1], 1)
+        });
+
+        const totalDuration = 0.4 + 0.2;
+        const wave = new Float32Array(Math.floor(totalDuration * 10)).fill(1);
+        const env = applyAdsr(wave, {
+          attack: 0.1,
+          decay: 0.1,
+          sustain: 0.5,
+          release: 0.2,
+          duration: 0.4,
+          sampleRate: 10
+        });
+        results.push({
+          name: "ADSR envelope endpoints match expected values",
+          pass: approxEqual(env[0], 0) &&
+            approxEqual(env[1], 1) &&
+            approxEqual(env[2], 0.5) &&
+            approxEqual(env[4], 0.5) &&
+            approxEqual(env[5], 0.25)
+        });
+
+        return results;
+      }
+
+      document.getElementById("runBtn").addEventListener("click", () => {
+        const results = runTests();
+        const container = document.getElementById("results");
+        container.innerHTML = "";
+        const summary = document.createElement("div");
+        const allPass = results.every((r) => r.pass);
+        summary.textContent = allPass ? "All tests passed." : "Some tests failed.";
+        summary.className = allPass ? "pass" : "fail";
+        container.appendChild(summary);
+        const list = document.createElement("ul");
+        results.forEach((result) => {
+          const li = document.createElement("li");
+          li.textContent = `${result.pass ? "PASS" : "FAIL"} - ${result.name}`;
+          li.className = result.pass ? "pass" : "fail";
+          list.appendChild(li);
+        });
+        container.appendChild(list);
+      });
+    </script>
+  </body>
+</html>

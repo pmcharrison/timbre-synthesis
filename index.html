@@ -1,0 +1,627 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <title>Timbre Synthesis</title>
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/fft.js@0.3.0/dist/fft.min.js"></script>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --panel: #1a1a1a;
+        --border: #2a2a2a;
+        --text: #e8e8e8;
+        --muted: #a7a7a7;
+        --accent: #4f8cff;
+      }
+
+      @media (prefers-color-scheme: light) {
+        :root {
+          --panel: #f7f7f7;
+          --border: #dcdcdc;
+          --text: #161616;
+          --muted: #555;
+          --accent: #2b6fff;
+        }
+      }
+
+      body {
+        margin: 0;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: var(--panel);
+        color: var(--text);
+      }
+
+      header {
+        padding: 20px 24px 8px 24px;
+        border-bottom: 1px solid var(--border);
+      }
+
+      h1 {
+        margin: 0 0 8px 0;
+        font-size: 24px;
+      }
+
+      .subtitle {
+        color: var(--muted);
+        font-size: 14px;
+      }
+
+      main {
+        display: grid;
+        grid-template-columns: 360px 1fr;
+        gap: 20px;
+        padding: 20px 24px 32px 24px;
+      }
+
+      section {
+        background: rgba(0, 0, 0, 0.08);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 16px;
+      }
+
+      .controls {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+
+      .control-group {
+        display: grid;
+        gap: 10px;
+      }
+
+      label {
+        font-size: 13px;
+        color: var(--muted);
+      }
+
+      input[type="range"] {
+        width: 100%;
+      }
+
+      .row {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 8px;
+        align-items: center;
+      }
+
+      .value {
+        font-variant-numeric: tabular-nums;
+        font-size: 12px;
+        color: var(--text);
+      }
+
+      .buttons {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      button {
+        background: var(--accent);
+        color: white;
+        border: none;
+        border-radius: 8px;
+        padding: 8px 12px;
+        font-size: 13px;
+        cursor: pointer;
+      }
+
+      button.secondary {
+        background: transparent;
+        color: var(--text);
+        border: 1px solid var(--border);
+      }
+
+      button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
+      .toggle {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        font-size: 12px;
+        color: var(--muted);
+      }
+
+      .harmonics {
+        max-height: 340px;
+        overflow: auto;
+        padding-right: 6px;
+      }
+
+      .plot-grid {
+        display: grid;
+        grid-template-rows: 1fr 1fr;
+        gap: 16px;
+      }
+
+      #status {
+        font-size: 12px;
+        color: var(--muted);
+      }
+
+      .plot-card {
+        height: 320px;
+      }
+
+      .footer {
+        padding: 8px 24px 24px 24px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Timbre synthesis</h1>
+      <div class="subtitle">
+        Additive harmonics + ADSR envelope, rendered in the browser.
+      </div>
+    </header>
+
+    <main>
+      <section class="controls">
+        <div class="control-group">
+          <div class="row">
+            <label for="f0">Fundamental frequency (Hz)</label>
+            <div class="value" id="f0Value"></div>
+          </div>
+          <input id="f0" type="range" min="50" max="2000" step="1" />
+        </div>
+
+        <div class="control-group">
+          <div class="row">
+            <label for="duration">Duration (seconds, excludes release)</label>
+            <div class="value" id="durationValue"></div>
+          </div>
+          <input id="duration" type="range" min="0.1" max="4" step="0.01" />
+        </div>
+
+        <div class="control-group">
+          <div class="row">
+            <label for="attack">Attack (seconds)</label>
+            <div class="value" id="attackValue"></div>
+          </div>
+          <input id="attack" type="range" min="0" max="1" step="0.01" />
+          <div class="row">
+            <label for="decay">Decay (seconds)</label>
+            <div class="value" id="decayValue"></div>
+          </div>
+          <input id="decay" type="range" min="0" max="1" step="0.01" />
+          <div class="row">
+            <label for="sustain">Sustain (0–1)</label>
+            <div class="value" id="sustainValue"></div>
+          </div>
+          <input id="sustain" type="range" min="0" max="1" step="0.01" />
+          <div class="row">
+            <label for="release">Release (seconds)</label>
+            <div class="value" id="releaseValue"></div>
+          </div>
+          <input id="release" type="range" min="0" max="2" step="0.01" />
+        </div>
+
+        <div class="control-group">
+          <div class="row">
+            <label for="sampleRate">Sample rate (Hz)</label>
+            <div class="value" id="sampleRateValue"></div>
+          </div>
+          <input id="sampleRate" type="range" min="8000" max="48000" step="100" />
+        </div>
+
+        <div class="control-group">
+          <div class="row">
+            <label for="waveWindow">Waveform window (ms)</label>
+            <div class="value" id="waveWindowValue"></div>
+          </div>
+          <input id="waveWindow" type="range" min="5" max="200" step="1" />
+        </div>
+
+        <div class="control-group">
+          <label>Harmonic amplitudes</label>
+          <div class="harmonics" id="harmonics"></div>
+        </div>
+
+        <div class="buttons">
+          <button id="playBtn">Play</button>
+          <button id="stopBtn" class="secondary">Stop</button>
+          <button id="resetBtn" class="secondary">Reset</button>
+          <button id="exportBtn" class="secondary">Export CSV</button>
+        </div>
+
+        <div class="toggle">
+          <input id="autoPlay" type="checkbox" />
+          <label for="autoPlay">Auto-play on change</label>
+        </div>
+        <div class="toggle">
+          <input id="autoRender" type="checkbox" checked />
+          <label for="autoRender">Auto-render plots</label>
+        </div>
+
+        <div id="status">Idle.</div>
+      </section>
+
+      <section class="plot-grid">
+        <div class="plot-card" id="waveformPlot"></div>
+        <div class="plot-card" id="spectrumPlot"></div>
+      </section>
+    </main>
+
+    <div class="footer">
+      Tip: enable Auto-play for realtime auditioning. Release time is appended to
+      the duration (duration does not include release).
+    </div>
+
+    <script>
+      const DEFAULTS = {
+        f0: 300,
+        duration: 1.5,
+        attack: 0.05,
+        decay: 0.0,
+        sustain: 1.0,
+        release: 0.05,
+        sampleRate: 44100,
+        waveWindowMs: 50,
+        amplitudes: [
+          0.467, 0.324, 0.416, 0.26, 0.193,
+          0.175, 0.146, 0.01, 0.01, 0.0,
+          0.0, 0.0, 0.0, 0.0, 0.0,
+          0.0, 0.0, 0.0, 0.0, 0.0
+        ]
+      };
+
+      const state = {
+        audioCtx: null,
+        buffer: null,
+        source: null,
+        renderPending: false
+      };
+
+      function setValue(id, value, digits = 3) {
+        document.getElementById(id).textContent = Number(value).toFixed(digits);
+      }
+
+      function clamp(value, min, max) {
+        return Math.max(min, Math.min(max, value));
+      }
+
+      function pureTone(frequency, sampleRate, duration, amplitude) {
+        const nSamples = Math.max(1, Math.floor(duration * sampleRate));
+        const buffer = new Float32Array(nSamples);
+        for (let i = 0; i < nSamples; i += 1) {
+          const t = i / sampleRate;
+          buffer[i] = amplitude * Math.sin(2 * Math.PI * frequency * t);
+        }
+        return buffer;
+      }
+
+      function mixWaves(waves) {
+        if (!waves.length) return new Float32Array(0);
+        const n = waves[0].length;
+        const mixed = new Float32Array(n);
+        for (const wave of waves) {
+          for (let i = 0; i < n; i += 1) {
+            mixed[i] += wave[i];
+          }
+        }
+        let maxAbs = 0;
+        for (let i = 0; i < n; i += 1) {
+          maxAbs = Math.max(maxAbs, Math.abs(mixed[i]));
+        }
+        if (maxAbs === 0) return mixed;
+        for (let i = 0; i < n; i += 1) {
+          mixed[i] /= maxAbs;
+        }
+        return mixed;
+      }
+
+      function applyAdsr(wave, params) {
+        const {
+          attack,
+          decay,
+          sustain,
+          release,
+          duration,
+          sampleRate
+        } = params;
+
+        const attackC = clamp(attack, 0, duration);
+        const decayC = clamp(decay, 0, Math.max(0, duration - attackC));
+        const hold = Math.max(0, duration - attackC - decayC);
+        const x = [
+          0,
+          attackC,
+          attackC + decayC,
+          attackC + decayC + hold,
+          attackC + decayC + hold + release
+        ];
+        const y = [0, 1, sustain, sustain, 0];
+
+        const envelope = new Float32Array(wave.length);
+        for (let i = 0; i < wave.length; i += 1) {
+          const t = i / sampleRate;
+          let j = 0;
+          while (j < x.length - 1 && t > x[j + 1]) j += 1;
+          const x0 = x[j];
+          const x1 = x[Math.min(j + 1, x.length - 1)];
+          const y0 = y[j];
+          const y1 = y[Math.min(j + 1, y.length - 1)];
+          if (x1 === x0) {
+            envelope[i] = y1;
+          } else {
+            const ratio = (t - x0) / (x1 - x0);
+            envelope[i] = y0 + ratio * (y1 - y0);
+          }
+        }
+
+        const output = new Float32Array(wave.length);
+        for (let i = 0; i < wave.length; i += 1) {
+          output[i] = wave[i] * envelope[i];
+        }
+        return output;
+      }
+
+      function renderAudio(params) {
+        const totalDuration = params.duration + params.release;
+        const frequencies = params.amplitudes.map(
+          (_, i) => params.f0 * (i + 1)
+        );
+        const waves = frequencies.map((freq, idx) =>
+          pureTone(freq, params.sampleRate, totalDuration, params.amplitudes[idx])
+        );
+        const mixed = mixWaves(waves);
+        return applyAdsr(mixed, { ...params, duration: params.duration });
+      }
+
+      function ensureAudioContext() {
+        if (!state.audioCtx) {
+          state.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        return state.audioCtx;
+      }
+
+      function stopAudio() {
+        if (state.source) {
+          state.source.stop();
+          state.source.disconnect();
+          state.source = null;
+        }
+      }
+
+      function playAudio(buffer, sampleRate) {
+        const ctx = ensureAudioContext();
+        stopAudio();
+        const audioBuffer = ctx.createBuffer(1, buffer.length, sampleRate);
+        audioBuffer.copyToChannel(buffer, 0);
+        const source = ctx.createBufferSource();
+        source.buffer = audioBuffer;
+        source.connect(ctx.destination);
+        source.start();
+        state.source = source;
+      }
+
+      function computeSpectrum(samples, sampleRate) {
+        const fftSize = 2048;
+        const fft = new FFT(fftSize);
+        const input = new Float32Array(fftSize);
+        const windowed = new Float32Array(fftSize);
+        for (let i = 0; i < fftSize; i += 1) {
+          input[i] = samples[i] || 0;
+          const w = 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / (fftSize - 1));
+          windowed[i] = input[i] * w;
+        }
+        const out = fft.createComplexArray();
+        fft.realTransform(out, windowed);
+        fft.completeSpectrum(out);
+        const magnitudes = [];
+        const freqs = [];
+        for (let i = 0; i < fftSize / 2; i += 1) {
+          const re = out[2 * i];
+          const im = out[2 * i + 1];
+          const mag = Math.sqrt(re * re + im * im);
+          magnitudes.push(mag);
+          freqs.push((i * sampleRate) / fftSize);
+        }
+        const maxMag = Math.max(...magnitudes, 1e-10);
+        const db = magnitudes.map((m) => 20 * Math.log10(m / maxMag));
+        return { freqs, db };
+      }
+
+      function renderPlots(samples, params) {
+        const waveWindow = Math.max(1, Math.floor(params.waveWindowMs * params.sampleRate / 1000));
+        const waveX = [];
+        const waveY = [];
+        for (let i = 0; i < Math.min(waveWindow, samples.length); i += 1) {
+          waveX.push(i / params.sampleRate);
+          waveY.push(samples[i]);
+        }
+
+        Plotly.react("waveformPlot", [
+          { x: waveX, y: waveY, mode: "lines", line: { color: "#4f8cff" } }
+        ], {
+          margin: { l: 40, r: 10, t: 30, b: 35 },
+          title: "Waveform",
+          xaxis: { title: "Time (s)" },
+          yaxis: { title: "Amplitude", range: [-1.1, 1.1] },
+          paper_bgcolor: "rgba(0,0,0,0)",
+          plot_bgcolor: "rgba(0,0,0,0)"
+        }, { displayModeBar: false });
+
+        const spectrum = computeSpectrum(samples, params.sampleRate);
+        Plotly.react("spectrumPlot", [
+          {
+            x: spectrum.freqs,
+            y: spectrum.db,
+            mode: "lines",
+            line: { color: "#f58b54" }
+          }
+        ], {
+          margin: { l: 40, r: 10, t: 30, b: 35 },
+          title: "Spectrum",
+          xaxis: { title: "Frequency (Hz)", range: [0, 10000] },
+          yaxis: { title: "Level (dB)" },
+          paper_bgcolor: "rgba(0,0,0,0)",
+          plot_bgcolor: "rgba(0,0,0,0)"
+        }, { displayModeBar: false });
+      }
+
+      function collectParams() {
+        const amplitudes = [];
+        for (let i = 0; i < 20; i += 1) {
+          amplitudes.push(parseFloat(document.getElementById(`amp_${i}`).value));
+        }
+        return {
+          f0: parseFloat(document.getElementById("f0").value),
+          duration: parseFloat(document.getElementById("duration").value),
+          attack: parseFloat(document.getElementById("attack").value),
+          decay: parseFloat(document.getElementById("decay").value),
+          sustain: parseFloat(document.getElementById("sustain").value),
+          release: parseFloat(document.getElementById("release").value),
+          sampleRate: parseInt(document.getElementById("sampleRate").value, 10),
+          waveWindowMs: parseFloat(document.getElementById("waveWindow").value),
+          amplitudes
+        };
+      }
+
+      function updateLabels(params) {
+        setValue("f0Value", params.f0, 0);
+        setValue("durationValue", params.duration, 2);
+        setValue("attackValue", params.attack, 2);
+        setValue("decayValue", params.decay, 2);
+        setValue("sustainValue", params.sustain, 2);
+        setValue("releaseValue", params.release, 2);
+        setValue("sampleRateValue", params.sampleRate, 0);
+        setValue("waveWindowValue", params.waveWindowMs, 0);
+        for (let i = 0; i < 20; i += 1) {
+          setValue(`ampValue_${i}`, params.amplitudes[i], 3);
+        }
+      }
+
+      function scheduleRender() {
+        if (state.renderPending) return;
+        state.renderPending = true;
+        window.requestAnimationFrame(() => {
+          state.renderPending = false;
+          const params = collectParams();
+          updateLabels(params);
+          const samples = renderAudio(params);
+          state.buffer = samples;
+          if (document.getElementById("autoRender").checked) {
+            renderPlots(samples, params);
+          }
+          if (document.getElementById("autoPlay").checked) {
+            playAudio(samples, params.sampleRate);
+          }
+          document.getElementById("status").textContent = `Rendered ${samples.length} samples.`;
+        });
+      }
+
+      function exportCsv(params) {
+        const data = {
+          f0: params.f0,
+          attack: params.attack,
+          decay: params.decay,
+          sustain: params.sustain,
+          release: params.release,
+          duration: params.duration,
+          sample_rate: params.sampleRate
+        };
+        params.amplitudes.forEach((amp, idx) => {
+          data[`amplitude_${idx}`] = amp;
+        });
+        const headers = Object.keys(data);
+        const row = headers.map((h) => data[h]);
+        const csv = `${headers.join(",")}\n${row.join(",")}\n`;
+        const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = "params.csv";
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
+      }
+
+      function setDefaults() {
+        document.getElementById("f0").value = DEFAULTS.f0;
+        document.getElementById("duration").value = DEFAULTS.duration;
+        document.getElementById("attack").value = DEFAULTS.attack;
+        document.getElementById("decay").value = DEFAULTS.decay;
+        document.getElementById("sustain").value = DEFAULTS.sustain;
+        document.getElementById("release").value = DEFAULTS.release;
+        document.getElementById("sampleRate").value = DEFAULTS.sampleRate;
+        document.getElementById("waveWindow").value = DEFAULTS.waveWindowMs;
+        for (let i = 0; i < 20; i += 1) {
+          document.getElementById(`amp_${i}`).value = DEFAULTS.amplitudes[i];
+        }
+        scheduleRender();
+      }
+
+      function buildHarmonics() {
+        const container = document.getElementById("harmonics");
+        for (let i = 0; i < 20; i += 1) {
+          const wrapper = document.createElement("div");
+          wrapper.className = "control-group";
+          const row = document.createElement("div");
+          row.className = "row";
+          const label = document.createElement("label");
+          label.textContent = `Amplitude ${i + 1}`;
+          label.htmlFor = `amp_${i}`;
+          const value = document.createElement("div");
+          value.className = "value";
+          value.id = `ampValue_${i}`;
+          row.appendChild(label);
+          row.appendChild(value);
+          const slider = document.createElement("input");
+          slider.type = "range";
+          slider.min = "0";
+          slider.max = "1";
+          slider.step = "0.001";
+          slider.id = `amp_${i}`;
+          slider.addEventListener("input", scheduleRender);
+          wrapper.appendChild(row);
+          wrapper.appendChild(slider);
+          container.appendChild(wrapper);
+        }
+      }
+
+      function wireControls() {
+        const ids = [
+          "f0", "duration", "attack", "decay", "sustain",
+          "release", "sampleRate", "waveWindow"
+        ];
+        ids.forEach((id) => {
+          document.getElementById(id).addEventListener("input", scheduleRender);
+        });
+        document.getElementById("playBtn").addEventListener("click", () => {
+          if (!state.buffer) scheduleRender();
+          const params = collectParams();
+          playAudio(state.buffer, params.sampleRate);
+        });
+        document.getElementById("stopBtn").addEventListener("click", () => {
+          stopAudio();
+        });
+        document.getElementById("resetBtn").addEventListener("click", () => {
+          setDefaults();
+        });
+        document.getElementById("exportBtn").addEventListener("click", () => {
+          exportCsv(collectParams());
+        });
+      }
+
+      buildHarmonics();
+      wireControls();
+      setDefaults();
+    </script>
+  </body>
+</html>
