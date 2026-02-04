@@ -8,7 +8,6 @@
     />
     <title>Timbre Synthesis</title>
     <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/fft.js@0.3.0/dist/fft.min.js"></script>
     <style>
       :root {
         color-scheme: light dark;
@@ -238,15 +237,6 @@
           <button id="exportBtn" class="secondary">Export CSV</button>
         </div>
 
-        <div class="toggle">
-          <input id="autoPlay" type="checkbox" />
-          <label for="autoPlay">Auto-play on change</label>
-        </div>
-        <div class="toggle">
-          <input id="autoRender" type="checkbox" checked />
-          <label for="autoRender">Auto-render plots</label>
-        </div>
-
         <div id="status">Idle.</div>
       </section>
 
@@ -257,8 +247,7 @@
     </main>
 
     <div class="footer">
-      Tip: enable Auto-play for realtime auditioning. Release time is appended to
-      the duration (duration does not include release).
+      Release time is appended to the duration (duration does not include release).
     </div>
 
     <script>
@@ -283,7 +272,11 @@
         audioCtx: null,
         buffer: null,
         source: null,
-        renderPending: false
+        gain: null,
+        renderPending: false,
+        pendingPlay: false,
+        autoPlay: true,
+        autoRender: true
       };
 
       function setValue(id, value, digits = 3) {
@@ -390,10 +383,16 @@
       }
 
       function stopAudio() {
-        if (state.source) {
-          state.source.stop();
+        if (state.source && state.gain && state.audioCtx) {
+          const now = state.audioCtx.currentTime;
+          state.gain.gain.cancelScheduledValues(now);
+          state.gain.gain.setValueAtTime(state.gain.gain.value, now);
+          state.gain.gain.linearRampToValueAtTime(0, now + 0.01);
+          state.source.stop(now + 0.02);
           state.source.disconnect();
+          state.gain.disconnect();
           state.source = null;
+          state.gain = null;
         }
       }
 
@@ -404,36 +403,31 @@
         audioBuffer.copyToChannel(buffer, 0);
         const source = ctx.createBufferSource();
         source.buffer = audioBuffer;
-        source.connect(ctx.destination);
+        const gain = ctx.createGain();
+        const now = ctx.currentTime;
+        const fadeIn = 0.01;
+        const fadeOut = 0.01;
+        gain.gain.setValueAtTime(0, now);
+        gain.gain.linearRampToValueAtTime(1, now + fadeIn);
+        gain.gain.setValueAtTime(1, now + Math.max(0, audioBuffer.duration - fadeOut));
+        gain.gain.linearRampToValueAtTime(0, now + audioBuffer.duration);
+        source.connect(gain);
+        gain.connect(ctx.destination);
         source.start();
         state.source = source;
+        state.gain = gain;
       }
 
-      function computeSpectrum(samples, sampleRate) {
-        const fftSize = 2048;
-        const fft = new FFT(fftSize);
-        const input = new Float32Array(fftSize);
-        const windowed = new Float32Array(fftSize);
-        for (let i = 0; i < fftSize; i += 1) {
-          input[i] = samples[i] || 0;
-          const w = 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / (fftSize - 1));
-          windowed[i] = input[i] * w;
-        }
-        const out = fft.createComplexArray();
-        fft.realTransform(out, windowed);
-        fft.completeSpectrum(out);
-        const magnitudes = [];
+      function computeIdealSpectrum(params) {
         const freqs = [];
-        for (let i = 0; i < fftSize / 2; i += 1) {
-          const re = out[2 * i];
-          const im = out[2 * i + 1];
-          const mag = Math.sqrt(re * re + im * im);
-          magnitudes.push(mag);
-          freqs.push((i * sampleRate) / fftSize);
-        }
-        const maxMag = Math.max(...magnitudes, 1e-10);
-        const db = magnitudes.map((m) => 20 * Math.log10(m / maxMag));
-        return { freqs, db };
+        const amps = [];
+        params.amplitudes.forEach((amp, idx) => {
+          const freq = params.f0 * (idx + 1);
+          const eps = Math.max(params.f0 * 0.01, 1);
+          freqs.push(freq - eps, freq, freq + eps);
+          amps.push(0, amp, 0);
+        });
+        return { freqs, amps };
       }
 
       function renderPlots(samples, params) {
@@ -456,11 +450,11 @@
           plot_bgcolor: "rgba(0,0,0,0)"
         }, { displayModeBar: false });
 
-        const spectrum = computeSpectrum(samples, params.sampleRate);
+        const spectrum = computeIdealSpectrum(params);
         Plotly.react("spectrumPlot", [
           {
             x: spectrum.freqs,
-            y: spectrum.db,
+            y: spectrum.amps,
             mode: "lines",
             line: { color: "#f58b54" }
           }
@@ -468,7 +462,7 @@
           margin: { l: 40, r: 10, t: 30, b: 35 },
           title: "Spectrum",
           xaxis: { title: "Frequency (Hz)", range: [0, 10000] },
-          yaxis: { title: "Level (dB)" },
+          yaxis: { title: "Amplitude", range: [0, 1.05] },
           paper_bgcolor: "rgba(0,0,0,0)",
           plot_bgcolor: "rgba(0,0,0,0)"
         }, { displayModeBar: false });
@@ -515,12 +509,13 @@
           updateLabels(params);
           const samples = renderAudio(params);
           state.buffer = samples;
-          if (document.getElementById("autoRender").checked) {
+          if (state.autoRender) {
             renderPlots(samples, params);
           }
-          if (document.getElementById("autoPlay").checked) {
-            playAudio(samples, params.sampleRate);
-          }
+          if (state.autoPlay && state.pendingPlay) {
+          playAudio(samples, params.sampleRate);
+          state.pendingPlay = false;
+        }
           document.getElementById("status").textContent = `Rendered ${samples.length} samples.`;
         });
       }
@@ -589,6 +584,18 @@
           slider.step = "0.001";
           slider.id = `amp_${i}`;
           slider.addEventListener("input", scheduleRender);
+          slider.addEventListener("change", () => {
+            if (state.autoPlay) {
+              state.pendingPlay = true;
+              scheduleRender();
+            }
+          });
+          slider.addEventListener("pointerup", () => {
+            if (state.autoPlay) {
+              state.pendingPlay = true;
+              scheduleRender();
+            }
+          });
           wrapper.appendChild(row);
           wrapper.appendChild(slider);
           container.appendChild(wrapper);
@@ -601,7 +608,20 @@
           "release", "sampleRate", "waveWindow"
         ];
         ids.forEach((id) => {
-          document.getElementById(id).addEventListener("input", scheduleRender);
+          const input = document.getElementById(id);
+          input.addEventListener("input", scheduleRender);
+          input.addEventListener("change", () => {
+            if (state.autoPlay) {
+              state.pendingPlay = true;
+              scheduleRender();
+            }
+          });
+          input.addEventListener("pointerup", () => {
+            if (state.autoPlay) {
+              state.pendingPlay = true;
+              scheduleRender();
+            }
+          });
         });
         document.getElementById("playBtn").addEventListener("click", () => {
           if (!state.buffer) scheduleRender();
